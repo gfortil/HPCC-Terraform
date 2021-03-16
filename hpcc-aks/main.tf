@@ -1,5 +1,5 @@
 variable "subscription_id" {
-  default = "example"
+  default = "ec0ba952-4ae9-4f69-b61c-4b96ff470038"
 }
 
 #############
@@ -13,12 +13,13 @@ provider "azurerm" {
 }
 
 provider "helm" {
-  alias = "aks"
-  kubernetes {
-    host                   = module.kubernetes.host
-    client_certificate     = base64decode(module.kubernetes.client_certificate)
-    client_key             = base64decode(module.kubernetes.client_key)
+alias = "aks"
+kubernetes {
+  host = module.kubernetes.host
+    client_certificate = base64decode(module.kubernetes.client_certificate)
+    client_key = base64decode(module.kubernetes.client_key)
     cluster_ca_certificate = base64decode(module.kubernetes.cluster_ca_certificate)
+    config_path = "kube_config"
   }
 }
 
@@ -32,7 +33,7 @@ module "subscription" {
 }
 
 module "rules" {
-  source = "git@github.com:openrba/python-azure-naming.git?ref=tf"
+  source = "../../python-azure-naming"
 }
 
 module "metadata"{
@@ -41,13 +42,13 @@ module "metadata"{
   naming_rules = module.rules.yaml
   
   market              = "us"
-  project             = "example"
-  location            = "useast2"
-  sre_team            = "example"
-  environment         = "sandbox"
-  product_name        = "example"
-  business_unit       = "example"
-  product_group       = "example"
+  project             = "test_by_godji"
+  location            = "eastus2"
+  sre_team            = "hpcc_platform"
+  environment         = "dev"
+  product_name        = "tfe"
+  business_unit       = "hpccplat"
+  product_group       = "core"
   subscription_id     = module.subscription.output.subscription_id
   subscription_type   = "nonprod"
   resource_group_type = "app"
@@ -62,23 +63,23 @@ module "resource_group" {
 }
 
 module "kubernetes" {
-  source = "github.com/Azure-Terraform/terraform-azurerm-kubernetes.git?ref=v1.2.0"
-
-  kubernetes_version = "1.18.2"
+  source = "github.com/Azure-Terraform/terraform-azurerm-kubernetes.git?ref=v1.5.1"
   
   location                 = module.metadata.location
   names                    = module.metadata.names
   tags                     = module.metadata.tags
+  kubernetes_version       = "1.18.10"
   resource_group_name      = module.resource_group.name
 
   default_node_pool_name                = "default"
   default_node_pool_vm_size             = "Standard_D2s_v3"
   default_node_pool_enable_auto_scaling = true
-  default_node_pool_node_min_count      = 1
-  default_node_pool_node_max_count      = 5
+  default_node_pool_node_min_count      = 3
+  default_node_pool_node_max_count      = 6
   default_node_pool_availability_zones  = [1,2,3]
 
   enable_kube_dashboard = true
+ 
 }
 
 ###############
@@ -86,17 +87,41 @@ module "kubernetes" {
 ###############
 
 resource "helm_release" "hpcc" {
-  provider    = helm.aks
+  provider  = helm.aks
 
-  name       = "mycluster"
-  namespace  = "default"
-  repository = "https://hpcc-systems.github.io/helm-chart/"
-  chart      = "hpcc"
-  version    = "7.10.2"
+  name      = "myhpcck8s"
+
+  # Local Chart #
+  chart     = "/Users/godji/work/HPCC-Platform/helm/hpcc"
+
+  # Chart Repository #
+  # namespace  = "default"
+  # repository = "https://hpcc-systems.github.io/helm-chart/"
+  # chart      = "hpcc"
+  # version    = "7.12.32"
+
+  values  = [
+    "${file("/Users/godji/work/cloud/values_kt.yaml")}"
+  ]
+
+  set {
+    name  = "global.image.root"
+    value   = "godji"
+  }
 
   set {
     name  = "global.image.version"
-    value = "latest"
+    value = "master-2021-03-15-r"
+  }
+
+  set {
+    name  = "sasha.wu-archiver.storage.existingClaim"
+    value = "myhpcck8s-dalistorage-pvc"
+  }
+
+   set {
+    name  = "sasha.dfuwu-archiver.storage.existingClaim"
+    value = "myhpcck8s-dalistorage-pvc"
   }
 
   set {
